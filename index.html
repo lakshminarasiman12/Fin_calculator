@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A cyberpunk-inspired fixed deposit yield and tax scanner."
+    />
+    <title>Yield &amp; Tax Scanner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      const storedTheme = localStorage.getItem("yield-tax-theme");
+      document.documentElement.dataset.theme =
+        storedTheme === "light" ? "light" : "dark";
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <canvas id="cursor-trail" aria-hidden="true"></canvas>
+    <div id="cursor-dot" aria-hidden="true"></div>
+    <div id="cursor-ring" aria-hidden="true"></div>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <main class="dashboard">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">YIELD &amp; TAX SCANNER</p>
+          <h1>Compare fixed-deposit outcomes</h1>
+          <p class="subtitle">
+            Illustrative sample rates <span>•</span> Quarterly compounding
+            <span>•</span> Estimates only
+          </p>
+        </div>
+        <div class="header-controls">
+          <button
+            class="theme-toggle"
+            id="theme-toggle"
+            type="button"
+            aria-label="Switch to solar light mode"
+            aria-pressed="false"
+          >
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="icon-core" cx="12" cy="12" r="4" />
+              <path class="icon-rays" d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+              <path class="icon-moon" d="M19.2 15.2A8 8 0 0 1 8.8 4.8 8 8 0 1 0 19.2 15.2Z" />
+            </svg>
+            <span class="mode-option mode-dark">MODE: CYBER DARK</span>
+            <span class="mode-divider" aria-hidden="true"></span>
+            <span class="mode-option mode-light">MODE: SOLAR LIGHT</span>
+          </button>
+          <div class="engine-status"><i></i> ENGINE: ONLINE</div>
+        </div>
+      </header>
+
+      <section class="glass-panel input-panel" aria-labelledby="input-title">
+        <div class="panel-heading">
+          <h2 id="input-title">INPUT PARAMETERS</h2>
+          <span class="panel-index">01 / CONFIGURE</span>
+        </div>
+        <form id="yield-form">
+          <label class="field">
+            <span>PRINCIPAL AMOUNT (₹)</span>
+            <input
+              id="principal"
+              name="principal"
+              type="number"
+              min="1"
+              max="1000000000000"
+              step="0.01"
+              value="500100"
+              title="Enter the one-time deposit principal in rupees."
+              required
+            />
+          </label>
+          <label class="field">
+            <span>TIME PERIOD (YEARS)</span>
+            <input
+              id="years"
+              name="years"
+              type="number"
+              min="0.25"
+              max="100"
+              step="0.25"
+              value="5"
+              title="Enter the investment tenure in years; fractions are supported."
+              required
+            />
+          </label>
+          <label class="field">
+            <span>SENIOR CITIZEN</span>
+            <span class="select-wrap">
+              <select id="senior" title="Senior-citizen status affects the TDS threshold.">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </span>
+          </label>
+          <label class="field">
+            <span>BANK PRODUCT</span>
+            <span class="select-wrap">
+              <select id="product" title="Choose one product or compare all products.">
+                <option value="">Compare all banks</option>
+                <option value="Bank A - 1 Year FD">Bank A</option>
+                <option value="Bank B - 1 Year FD">Bank B</option>
+                <option value="Bank C - 1 Year FD">Bank C</option>
+                <option value="Bank D - 1 Year FD">Bank D</option>
+              </select>
+            </span>
+          </label>
+          <label class="pan-control" for="pan">
+            <span class="field-name">PAN CARD PROVIDED</span>
+            <span class="checkbox-line">
+              <input id="pan" type="checkbox" checked title="PAN status changes the illustrative TDS rate." />
+              <span class="custom-check" aria-hidden="true"></span>
+              <span>Yes</span>
+            </span>
+          </label>
+          <button class="calculate-button" type="submit">
+            <span>CALCULATE YIELDS</span><b aria-hidden="true">↗</b>
+          </button>
+        </form>
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+      </section>
+
+      <section class="glass-panel outcomes-panel" aria-labelledby="outcomes-title">
+        <div class="section-heading">
+          <div>
+            <p class="panel-index">02 / LIVE PROJECTION</p>
+            <h2 id="outcomes-title">PROJECTED OUTCOMES</h2>
+          </div>
+          <div class="result-status" id="result-status">4 products</div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">BANK PRODUCT</th>
+                <th scope="col">ANNUAL RATE</th>
+                <th scope="col">TOTAL INTEREST</th>
+                <th scope="col">FINAL BALANCE</th>
+              </tr>
+            </thead>
+            <tbody id="results">
+              <tr><td colspan="4" class="loading">Initializing projection engine…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="market-note" id="rates-note">RANDOMIZED SAMPLE RATES: 6.50% - 8.20% PER CALCULATION</p>
+      </section>
+
+      <section class="glass-panel analytics-panel" aria-labelledby="analytics-title">
+        <div class="section-heading analytics-heading">
+          <div>
+            <p class="panel-index">03 / DECISION SUPPORT</p>
+            <h2 id="analytics-title">RECOMMENDATION &amp; TAX ANALYSIS</h2>
+          </div>
+          <span class="live-tag"><i></i> ANALYSIS LIVE</span>
+        </div>
+        <div class="metrics-grid" id="metrics">
+          <article class="metric-card performer-card">
+            <span class="metric-label">BEST PERFORMER</span>
+            <strong data-metric="Best-performing bank">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">BEST MATURITY</span>
+            <strong data-metric="Best-performing final balance">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">YIELD SPREAD</span>
+            <strong data-metric="Yield spread">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">ESTIMATED YEARLY INTEREST</span>
+            <strong data-metric="Estimated yearly interest">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">TDS THRESHOLD</span>
+            <strong data-metric="TDS threshold">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">TAX RATE</span>
+            <strong data-metric="TDS rate">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">ESTIMATED TDS</span>
+            <strong data-metric="TDS deduction">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">NET YEARLY INTEREST (AFTER TDS)</span>
+            <strong data-metric="Net yearly interest after TDS">—</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="glass-panel feature-panel charts-panel" aria-labelledby="charts-title">
+        <div class="section-heading">
+          <div>
+            <p class="panel-index">04 / VISUAL ANALYSIS</p>
+            <h2 id="charts-title">YIELD CHARTS</h2>
+          </div>
+        </div>
+        <div class="chart-tabs" role="tablist" aria-label="Yield charts">
+          <button type="button" class="chart-tab is-active" role="tab" aria-selected="true" data-chart="growth">Growth curve</button>
+          <button type="button" class="chart-tab" role="tab" aria-selected="false" data-chart="maturity">Maturity</button>
+          <button type="button" class="chart-tab" role="tab" aria-selected="false" data-chart="gross-net">Gross vs net</button>
+          <button type="button" class="chart-tab" role="tab" aria-selected="false" data-chart="interest">Interest-on-interest</button>
+          <button type="button" class="chart-tab" role="tab" aria-selected="false" data-chart="tds">TDS by year</button>
+        </div>
+        <div class="chart-wrap"><canvas id="yield-chart" role="img" aria-label="Yield chart"></canvas></div>
+      </section>
+
+      <section class="glass-panel feature-panel" aria-labelledby="whatif-title">
+        <div class="section-heading">
+          <div>
+            <p class="panel-index">05 / LIVE SIMULATION</p>
+            <h2 id="whatif-title">WHAT-IF PANEL</h2>
+          </div>
+        </div>
+        <div class="slider-grid">
+          <label class="slider-field" for="whatif-rate">
+            <span>RATE ADJUSTMENT <strong id="whatif-rate-value"></strong></span>
+            <input id="whatif-rate" type="range" min="-2" max="2" step="0.1" value="0" title="Add or subtract percentage points from every displayed bank rate." />
+          </label>
+          <label class="slider-field" for="whatif-years">
+            <span>TENURE <strong id="whatif-years-value"></strong></span>
+            <input id="whatif-years" type="range" min="0.25" max="100" step="0.25" value="5" title="Adjust the investment tenure in years." />
+          </label>
+          <label class="slider-field" for="whatif-principal">
+            <span>PRINCIPAL <strong id="whatif-principal-value"></strong></span>
+            <input id="whatif-principal" type="range" min="1000" max="1000000000000" step="1000" value="500100" title="Adjust the initial deposit amount in rupees." />
+          </label>
+        </div>
+        <div id="whatif-results" class="table-scroll"></div>
+      </section>
+
+      <section class="glass-panel feature-panel tools-grid" aria-label="Return and planning tools">
+        <article>
+          <p class="panel-index">06 / THRESHOLD CHECK</p>
+          <h2>BREAK-EVEN FOR TDS</h2>
+          <p class="tool-hint">Estimated principal at which annual interest crosses the applicable TDS threshold.</p>
+          <div id="breakeven-results" class="table-scroll"></div>
+        </article>
+        <article>
+          <p class="panel-index">07 / PURCHASING POWER</p>
+          <h2>REAL RETURN AFTER INFLATION</h2>
+          <label class="inline-field">Assumed inflation (%)
+            <input id="inflation-rate" type="number" min="0" max="100" step="0.1" value="5" title="Set the annual inflation assumption used to estimate purchasing-power-adjusted return." />
+          </label>
+          <div id="real-return-results"></div>
+        </article>
+      </section>
+
+      <section class="glass-panel feature-panel tools-grid" aria-label="Goal planner and saved scenarios">
+        <article>
+          <p class="panel-index">08 / INVESTMENT TARGETS</p>
+          <h2>GOAL PLANNER</h2>
+          <label class="inline-field" for="goal-amount">Target amount (₹)
+            <input id="goal-amount" type="number" min="1" max="1000000000000" step="1000" value="1000000" title="Enter the future balance you want to reach." />
+          </label>
+          <label class="inline-field" for="goal-years">Target tenure (years)
+            <input id="goal-years" type="number" min="0.25" max="100" step="0.25" value="5" title="Enter how many years you have to reach the target." />
+          </label>
+          <div id="goal-results"></div>
+        </article>
+        <article>
+          <p class="panel-index">09 / PORTABLE PLANS</p>
+          <h2>SCENARIO SAVE / LOAD</h2>
+          <div class="action-row">
+            <button type="button" class="utility-button" id="save-scenario">Save current scenario</button>
+            <button type="button" class="utility-button" id="load-scenario">Load scenario JSON</button>
+            <input type="file" id="scenario-file" accept="application/json,.json" hidden title="Choose a saved scenario JSON file." />
+          </div>
+          <p class="tool-hint" id="scenario-message" role="status"></p>
+          <h3>LAST 5 CALCULATIONS</h3>
+          <ol id="calculation-history" class="history-list"></ol>
+        </article>
+      </section>
+
+      <section class="glass-panel feature-panel export-panel" aria-labelledby="export-title">
+        <div class="section-heading">
+          <div>
+            <p class="panel-index">10 / DOWNLOADS</p>
+            <h2 id="export-title">EXPORT REPORT</h2>
+          </div>
+        </div>
+        <div class="action-row">
+          <button type="button" class="utility-button" id="export-excel" title="Download comparison and year-by-year projections as an Excel workbook.">Export Excel workbook</button>
+          <button type="button" class="utility-button" id="export-pdf" title="Download a concise PDF summary report.">Export PDF summary</button>
+          <button type="button" class="utility-button" id="export-csv" title="Download the bank comparison as CSV.">Export CSV</button>
+        </div>
+        <p class="tool-hint" id="export-message" role="status"></p>
+      </section>
+
+      <details class="glass-panel glossary-panel">
+        <summary>GLOSSARY</summary>
+        <dl class="glossary-list">
+          <dt>TDS</dt><dd>Tax deducted at source; the estimate here is illustrative and depends on the applicable rules and depositor circumstances.</dd>
+          <dt>PAN</dt><dd>Permanent Account Number used for tax identification in India.</dd>
+          <dt>EAY</dt><dd>Effective annual yield after accounting for compounding within a year.</dd>
+          <dt>Compounding</dt><dd>Interest is added to principal and can earn interest in later periods.</dd>
+          <dt>Form 15G / 15H</dt><dd>Declarations that eligible taxpayers may submit to request non-deduction of TDS; eligibility rules apply.</dd>
+          <dt>Basis point</dt><dd>One hundredth of a percentage point (0.01%).</dd>
+        </dl>
+      </details>
+      <footer>RATES ARE SIMULATED FOR DEMONSTRATION · NOT A BANK OFFER OR TAX ADVICE</footer>
+    </main>
+  </body>
+</html>
